@@ -1,0 +1,32 @@
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# PHP / Composer
+/vendor/
+composer.phar
+.env
+.env.*
+!.env.example
+
+# Logs & temp
+*.log
+*.tmp
+npm-debug.log*
+
+# Node (kalau suatu saat pakai tooling frontend)
+node_modules/
+dist/
+
+# Upload & file lokal (foto hanya di browser/localStorage, tidak di server)
+uploads/
+storage/uploads/*
+!storage/uploads/.gitkeep
