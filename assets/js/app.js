@@ -30,6 +30,7 @@ window.CVApp = window.CVApp || {};
   ];
 
   CVApp.currentFont = 'times';
+  CVApp.theme = 'light';
 
   CVApp.escapeHtml = function (t) {
     return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) {
@@ -64,6 +65,35 @@ window.CVApp = window.CVApp || {};
         popup: 'swal2-toast-cvats'
       }
     });
+  };
+
+  CVApp.applyTheme = function (theme) {
+    CVApp.theme = theme || 'light';
+    var root = document.documentElement;
+    if (CVApp.theme === 'dark') {
+      root.setAttribute('data-theme', 'dark');
+    } else {
+      root.removeAttribute('data-theme');
+    }
+    var btn = document.getElementById('themeToggle');
+    if (btn) {
+      var sun = btn.querySelector('.sun-icon');
+      var moon = btn.querySelector('.moon-icon');
+      if (sun && moon) {
+        if (CVApp.theme === 'dark') {
+          sun.classList.remove('hidden');
+          moon.classList.add('hidden');
+        } else {
+          sun.classList.add('hidden');
+          moon.classList.remove('hidden');
+        }
+      }
+    }
+    // Sync theme-color meta tag
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) {
+      meta.setAttribute('content', CVApp.theme === 'dark' ? '#0f172a' : '#0ea5e9');
+    }
   };
 
   function setErr(el, bad) {
@@ -207,11 +237,105 @@ window.CVApp = window.CVApp || {};
     }
   }
 
+  // Undo/redo stack
+  var UNDO_STACK = [];
+  var REDO_STACK = [];
+  var UNDO_MAX = 50;
+  var UNDO_IGNORING = false;
+
+  function pushSnapshot() {
+    if (UNDO_IGNORING) return;
+    if (typeof window.CVApp.collectData !== 'function') return;
+    try {
+      var data = window.CVApp.collectData();
+      data.font = window.CVApp.currentFont || 'times';
+      data.theme = window.CVApp.theme || 'light';
+      var snapshot = JSON.stringify(data);
+      // Tidak duplikasi snapshot berurutan yang sama
+      if (UNDO_STACK.length > 0 && UNDO_STACK[UNDO_STACK.length - 1] === snapshot) {
+        return;
+      }
+      UNDO_STACK.push(snapshot);
+      if (UNDO_STACK.length > UNDO_MAX) UNDO_STACK.shift();
+      REDO_STACK = [];
+    } catch (e) {}
+  }
+
+  function applySnapshot(data) {
+    UNDO_IGNORING = true;
+    try {
+      // Restore text fields
+      FIELD_MAP.forEach(function (m) {
+        var el = document.getElementById(m.id);
+        if (el) el.value = pick(data, m.key, m.legacyKeys) || '';
+      });
+
+      var skillsEl = document.getElementById('skills');
+      if (skillsEl) {
+        if (Array.isArray(data.skills)) skillsEl.value = data.skills.join(', ');
+        else if (typeof data.skills === 'string') skillsEl.value = data.skills;
+        else skillsEl.value = '';
+      }
+
+      var photoVal = typeof data.photo === 'string' ? data.photo : '';
+      if (photoVal && window.CVApp.isSafePhoto && !window.CVApp.isSafePhoto(photoVal)) {
+        photoVal = '';
+      }
+      setPhoto(photoVal);
+
+      if (data.font === 'arial' || data.font === 'times') {
+        window.CVApp.currentFont = data.font;
+        var fontSel = document.getElementById('fontSelect');
+        if (fontSel) fontSel.value = data.font;
+      }
+
+      if (data.theme === 'dark' || data.theme === 'light') {
+        window.CVApp.applyTheme(data.theme);
+      }
+
+      if (Array.isArray(data.education)) rebuildRows('eduContainer', '.edu-item', data.education, EDU_MAP);
+      if (Array.isArray(data.experience)) rebuildRows('expContainer', '.exp-item', data.experience, EXP_MAP);
+
+      if (window.CVApp.updateCounters) window.CVApp.updateCounters();
+      window.CVApp.renderPreview();
+      initCharCounters();
+    } finally {
+      UNDO_IGNORING = false;
+    }
+  }
+
+  CVApp.undo = function () {
+    if (UNDO_STACK.length === 0) return;
+    var current = window.CVApp.collectData();
+    current.font = window.CVApp.currentFont || 'times';
+    current.theme = window.CVApp.theme || 'light';
+    REDO_STACK.push(JSON.stringify(current));
+
+    var prev = UNDO_STACK.pop();
+    applySnapshot(JSON.parse(prev));
+    save();
+    window.CVApp.toast('Dibatalkan (Undo)');
+  };
+
+  CVApp.redo = function () {
+    if (REDO_STACK.length === 0) return;
+    var current = window.CVApp.collectData();
+    current.font = window.CVApp.currentFont || 'times';
+    current.theme = window.CVApp.theme || 'light';
+    UNDO_STACK.push(JSON.stringify(current));
+
+    var next = REDO_STACK.pop();
+    applySnapshot(JSON.parse(next));
+    save();
+    window.CVApp.toast('Dikembalikan (Redo)');
+  };
+
   function save() {
     if (typeof window.CVApp.collectData !== 'function') return;
     try {
       var data = window.CVApp.collectData();
       data.font = window.CVApp.currentFont || 'times';
+      data.theme = window.CVApp.theme || 'light';
       data._v = 1;
       localStorage.setItem(LS_KEY, JSON.stringify(data));
     } catch (e) {
@@ -220,6 +344,7 @@ window.CVApp = window.CVApp || {};
         window.CVApp.toast('Penyimpanan penuh: foto tidak ikut tersimpan otomatis.', 'error');
       }
     }
+    pushSnapshot();
   }
 
   function pick(obj, key, legacyKeys) {
@@ -299,6 +424,14 @@ window.CVApp = window.CVApp || {};
       if (fontSelEarly) fontSelEarly.value = d.font;
     }
 
+    // Restore theme dari data tersimpan (jika belum ada di localStorage terpisah).
+    if (d.theme === 'dark' || d.theme === 'light') {
+      window.CVApp.applyTheme(d.theme);
+      try {
+        localStorage.setItem('cvatsTheme', d.theme);
+      } catch (e) {}
+    }
+
     if (Array.isArray(d.education)) rebuildRows('eduContainer', '.edu-item', d.education, EDU_MAP);
     if (Array.isArray(d.experience)) rebuildRows('expContainer', '.exp-item', d.experience, EXP_MAP);
 
@@ -355,6 +488,36 @@ window.CVApp = window.CVApp || {};
     }, 80);
   }
 
+  function updateCharCounter(el) {
+    var max = el.getAttribute('data-max-chars');
+    if (!max) return;
+    var maxInt = parseInt(max, 10);
+    var len = el.value.length;
+    var counterId = 'counter-' + el.id;
+    var counter = document.getElementById(counterId);
+    if (counter) {
+      counter.textContent = len + ' / ' + maxInt;
+      counter.classList.toggle('text-red-500', len > maxInt);
+      counter.classList.toggle('text-slate-400', len <= maxInt);
+    }
+  }
+
+  CVApp.bindCharCounter = function (el) {
+    if (!el || !el.getAttribute('data-max-chars')) return;
+    if (el.dataset.cvBound) return;
+    el.dataset.cvBound = '1';
+    updateCharCounter(el);
+    el.addEventListener('input', function () {
+      updateCharCounter(el);
+    });
+  };
+
+  function initCharCounters() {
+    document.querySelectorAll('textarea[data-max-chars]').forEach(function (el) {
+      CVApp.bindCharCounter(el);
+    });
+  }
+
   function init() {
     if (window.AOS) {
       AOS.init({ duration: 650, once: true, offset: 40 });
@@ -372,6 +535,33 @@ window.CVApp = window.CVApp || {};
         save();
       });
     }
+
+    // Inisialisasi dark mode
+    var savedTheme = null;
+    try {
+      savedTheme = localStorage.getItem('cvatsTheme');
+    } catch (e) {}
+    if (savedTheme === 'dark' || savedTheme === 'light') {
+      window.CVApp.applyTheme(savedTheme);
+    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      window.CVApp.applyTheme('dark');
+    } else {
+      window.CVApp.applyTheme('light');
+    }
+
+    var themeBtn = document.getElementById('themeToggle');
+    if (themeBtn) {
+      themeBtn.addEventListener('click', function () {
+        var next = window.CVApp.theme === 'dark' ? 'light' : 'dark';
+        window.CVApp.applyTheme(next);
+        try {
+          localStorage.setItem('cvatsTheme', next);
+        } catch (e) {}
+        window.CVApp.toast(next === 'dark' ? 'Mode gelap diaktifkan' : 'Mode terang diaktifkan');
+      });
+    }
+
+    initCharCounters();
 
     document.querySelectorAll('.js-download').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -402,6 +592,26 @@ window.CVApp = window.CVApp || {};
 
     var clearBtn = document.getElementById('btnClear');
     if (clearBtn) clearBtn.addEventListener('click', clearForm);
+
+    // Undo/Redo tombol UI
+    var btnUndo = document.getElementById('btnUndo');
+    if (btnUndo) btnUndo.addEventListener('click', function () { window.CVApp.undo(); });
+    var btnRedo = document.getElementById('btnRedo');
+    if (btnRedo) btnRedo.addEventListener('click', function () { window.CVApp.redo(); });
+
+    // Keyboard shortcuts: Ctrl+Z / Cmd+Z undo, Ctrl+Y / Cmd+Shift+Z redo
+    document.addEventListener('keydown', function (e) {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          window.CVApp.undo();
+        }
+        if ((e.key === 'y' && !e.shiftKey) || (e.key === 'z' && e.shiftKey)) {
+          e.preventDefault();
+          window.CVApp.redo();
+        }
+      }
+    });
 
     var yearEl = document.getElementById('year');
     if (yearEl) yearEl.textContent = String(new Date().getFullYear());
