@@ -52,21 +52,18 @@ window.CVApp = window.CVApp || {};
   };
 
   CVApp.toast = function (msg, type) {
-    var wrap = document.getElementById('toastWrap');
-    if (!wrap) {
-      wrap = document.createElement('div');
-      wrap.id = 'toastWrap';
-      document.body.appendChild(wrap);
-    }
-    var t = document.createElement('div');
-    t.className = 'toast' + (type === 'error' ? ' bg-red-600' : '');
-    t.textContent = msg;
-    wrap.appendChild(t);
-    setTimeout(function () {
-      t.style.transition = 'opacity .3s';
-      t.style.opacity = '0';
-      setTimeout(function () { t.remove(); }, 300);
-    }, 2800);
+    Swal.fire({
+      toast: true,
+      position: 'bottom-end',
+      icon: type === 'error' ? 'error' : 'success',
+      title: msg,
+      showConfirmButton: false,
+      timer: 2800,
+      timerProgressBar: true,
+      customClass: {
+        popup: 'swal2-toast-cvats'
+      }
+    });
   };
 
   function setErr(el, bad) {
@@ -310,34 +307,44 @@ window.CVApp = window.CVApp || {};
   }
 
   function clearForm() {
-    if (!window.confirm('Hapus semua data form?')) return;
+    Swal.fire({
+      icon: 'question',
+      title: 'Hapus semua data form?',
+      text: 'Data yang tersimpan di browser akan dihapus permanen.',
+      showCancelButton: true,
+      confirmButtonText: 'Hapus',
+      cancelButtonText: 'Batal',
+      reverseButtons: true
+    }).then(function (result) {
+      if (!result.isConfirmed) return;
 
-    FIELD_MAP.forEach(function (m) {
-      var el = document.getElementById(m.id);
-      if (el) {
-        el.value = '';
-        setErr(el, false);
-      }
+      FIELD_MAP.forEach(function (m) {
+        var el = document.getElementById(m.id);
+        if (el) {
+          el.value = '';
+          setErr(el, false);
+        }
+      });
+
+      var skillsEl = document.getElementById('skills');
+      if (skillsEl) skillsEl.value = '';
+
+      var pic = document.getElementById('photo');
+      if (pic) pic.value = '';
+
+      setPhoto('');
+      rebuildRows('eduContainer', '.edu-item', [], EDU_MAP);
+      rebuildRows('expContainer', '.exp-item', [], EXP_MAP);
+
+      if (window.CVApp.updateCounters) window.CVApp.updateCounters();
+
+      try {
+        localStorage.removeItem(LS_KEY);
+      } catch (e) {}
+
+      window.CVApp.renderPreview();
+      window.CVApp.toast('Form telah dikosongkan.');
     });
-
-    var skillsEl = document.getElementById('skills');
-    if (skillsEl) skillsEl.value = '';
-
-    var pic = document.getElementById('photo');
-    if (pic) pic.value = '';
-
-    setPhoto('');
-    rebuildRows('eduContainer', '.edu-item', [], EDU_MAP);
-    rebuildRows('expContainer', '.exp-item', [], EXP_MAP);
-
-    if (window.CVApp.updateCounters) window.CVApp.updateCounters();
-
-    try {
-      localStorage.removeItem(LS_KEY);
-    } catch (e) {}
-
-    window.CVApp.renderPreview();
-    window.CVApp.toast('Form telah dikosongkan.');
   }
 
   function schedulePreview() {
