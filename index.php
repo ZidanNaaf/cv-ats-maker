@@ -253,9 +253,10 @@ $currentYear = date('Y');
 
     </main>
 
-    <footer class="text-center py-8 text-xs text-slate-400 no-print">
-        &copy; <span id="year"><?php echo (int) $currentYear; ?></span> <?php echo htmlspecialchars($siteName); ?> - HTML5, CSS3, JavaScript &amp; PHP.
-    </footer>
+<footer class="text-center py-8 text-xs text-slate-400 no-print">
+    &copy; <span id="year"><?php echo (int) $currentYear; ?></span> <?php echo htmlspecialchars($siteName); ?>. 
+    Powered by <a href="https://www.codeboost.id" target="_blank" rel="noopener noreferrer" class="underline hover:text-slate-600 transition-colors">Codeboost Creative</a>
+</footer>
 
     <script src="https://cdn.jsdelivr.net/npm/pdfmake@0.3.3/build/pdfmake.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/pdfmake@0.3.3/build/standard-fonts/Times.js"></script>
